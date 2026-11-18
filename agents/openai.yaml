@@ -1,0 +1,4 @@
+interface:
+  display_name: "OneCall 电话数字员工"
+  short_description: "查找电话员工、体验通话，管理 OneCall 团队外呼任务"
+  default_prompt: "使用 $onecall-phonecall 帮我找到适合业务的电话数字员工。"

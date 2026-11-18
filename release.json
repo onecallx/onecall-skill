@@ -1,0 +1,7 @@
+{
+  "name": "onecall-phonecall",
+  "version": "0.1.0",
+  "protocol": 1,
+  "runtime": "Node.js >= 20",
+  "entrypoint": "scripts/onecall.mjs"
+}
