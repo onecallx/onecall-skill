@@ -93,9 +93,33 @@ node ~/.codex/skills/onecall-phonecall/scripts/onecall.mjs market list --q 回�
 
 你说：`我要用团队功能，API Key 怎么配？`
 
-你会看到：OneCall 开发者页链接。
-你要做：在开发者页创建最小权限的 API Key，配到**本机**环境变量 `ONECALL_API_KEY`（或私密凭据文件）。密钥不需要、也不应该贴进对话。
-验证：对助手说 `看下配置状态`，显示密钥已配置即可。
+你会看到：OneCall 开发者页链接（https://app.16x.tech/developer）。
+你要做：
+
+1. **网页创建 Key**：登录后在开发者页创建 API Key（`sk_live_` 开头），按用途勾最小权限——员工 `assistant:read`、通话 `calls:read`、任务 `outbound:read`，要做外呼再加 `outbound:write`。
+
+2. **本机配置**（二选一，密钥只存本机）：
+
+   方式 A · 环境变量（当前终端有效）：
+
+   ```sh
+   export ONECALL_API_KEY="sk_live_你的密钥"
+   ```
+
+   方式 B · 私密文件（推荐，持久；技能会校验权限必须 0600）：
+
+   ```sh
+   mkdir -p ~/.onecall
+   printf '{"apiKey": "sk_live_你的密钥"}' > ~/.onecall/creds.json
+   chmod 600 ~/.onecall/creds.json
+   export ONECALL_CREDENTIALS_FILE="$HOME/.onecall/creds.json"
+   ```
+
+   要每次自动生效，把 `export` 那行加进 `~/.zshrc` / `~/.bashrc`；Windows 用 `setx ONECALL_API_KEY "sk_live_…"`。
+
+3. **验证**：对助手说 `看下配置状态`，显示密钥已配置即可（真正的权限校验由服务端在首次团队查询时完成）。
+
+安全三原则：密钥**不贴进对话**、**不提交进仓库**；疑似泄露到开发者页**直接吊销重建**，换新后只更新本机那一个文件。
 
 **第 5 步 · 看家底**
 
