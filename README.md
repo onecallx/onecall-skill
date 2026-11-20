@@ -35,9 +35,11 @@ Claude Code、WorkBuddy、OpenClaw 的常见目录见[安装与配置](reference
 默认连接官方服务，无需配置即可使用：
 
 ```sh
-node ~/.codex/skills/onecall-phonecall/scripts/onecall.mjs status
-node ~/.codex/skills/onecall-phonecall/scripts/onecall.mjs market list --q 回访
+node <skill-dir>/scripts/onecall.mjs status
+node <skill-dir>/scripts/onecall.mjs market list --q 回访
 ```
+
+`<skill-dir>` 替换为实际安装目录（各宿主的 Skills 目录见[安装与配置](references/setup.md)）。
 
 公开查询无需密钥。团队操作需要在 OneCall 开发者页面创建 API Key，并在本机配置 `ONECALL_API_KEY`，或通过 `ONECALL_CREDENTIALS_FILE` 指向私密 JSON 文件。不要把密钥粘贴进对话或提交到仓库。`status` 只检查本地配置，不代表服务器授权成功。
 
