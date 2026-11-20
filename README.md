@@ -32,7 +32,7 @@ Claude Code、WorkBuddy、OpenClaw 的常见目录见[安装与配置](reference
 
 ## 连接 OneCall
 
-默认连接官方服务，无需配置即可使用。下面以 Codex 为例（其他宿主替换为实际安装路径）：
+下面以 Codex 为例（其他宿主替换为实际安装路径）：
 
 ```sh
 node ~/.codex/skills/onecall-phonecall/scripts/onecall.mjs status
