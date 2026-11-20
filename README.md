@@ -19,7 +19,7 @@
 
 ```text
 请帮我安装 OneCall 电话技能：https://github.com/onecallx/onecall-skill
-先读取 SKILL.md，保留完整目录，安装后告诉我如何配置 OneCall 站点。
+先读取 SKILL.md，保留完整目录。
 ```
 
 也可以手动克隆到宿主支持的 Skills 目录。下面以 Codex 为例（已有同名目录时先核对本地修改）：
