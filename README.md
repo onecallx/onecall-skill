@@ -88,7 +88,7 @@ node ~/.codex/skills/onecall-phonecall/scripts/onecall.mjs market list --q 回�
 
 示例指令：`我要用团队功能，API Key 怎么配？`
 
-返回 OneCall 开发者页链接（https://app.16x.tech/developer）。配置步骤：
+返回 OneCall 开发者页链接（`https://app.16x.tech/developer`）。配置步骤：
 
 1. **网页创建 Key**：登录后在开发者页创建 API Key（`sk_live_` 开头），按用途勾最小权限——员工 `assistant:read`、通话 `calls:read`、任务 `outbound:read`，要做外呼再加 `outbound:write`。
 
