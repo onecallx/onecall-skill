@@ -98,24 +98,38 @@ node ~/.codex/skills/onecall-phonecall/scripts/onecall.mjs market list --q 回�
 
 1. **网页创建 Key**：登录后在开发者页创建 API Key（`sk_live_` 开头），按用途勾最小权限——员工 `assistant:read`、通话 `calls:read`、任务 `outbound:read`，要做外呼再加 `outbound:write`。
 
-2. **本机配置**（二选一，密钥只存本机）：
+2. **本机配置**（二选一，密钥只存本机。两个变量名作用不同：`ONECALL_API_KEY` 直接存密钥本体；`ONECALL_CREDENTIALS_FILE` 只存一个指向私密文件的路径）：
 
-   方式 A · 环境变量（当前终端有效）：
+   | 方式 | 用的变量 | 密钥实际存哪 | 关掉终端后 | 适合 |
+   | --- | --- | --- | --- | --- |
+   | A · 环境变量 | `ONECALL_API_KEY` | 只在当前终端内存里 | 失效，要重设 | 临时试一下 |
+   | B · 私密文件（推荐） | `ONECALL_CREDENTIALS_FILE` | `~/.onecall/creds.json` 文件（0600 权限） | 文件还在，重开终端只需重设路径变量 | 长期使用 |
+
+   **方式 A · 环境变量**（macOS/Linux，只对当前这个终端窗口有效）：
 
    ```sh
-   export ONECALL_API_KEY="sk_live_你的密钥"
+   # 把密钥本体放进变量；关掉终端就失效
+   export ONECALL_API_KEY="sk_live_你复制的密钥"
    ```
 
-   方式 B · 私密文件（推荐，持久；技能会校验权限必须 0600）：
+   **方式 B · 私密文件**（推荐；技能会校验文件必须 0600，权限不对会拒绝读取）：
 
    ```sh
+   # 1. 建一个自己可见的目录（已存在也不报错）
    mkdir -p ~/.onecall
-   printf '{"apiKey": "sk_live_你的密钥"}' > ~/.onecall/creds.json
+   # 2. 把密钥写进 JSON 文件（内容必须是 {"apiKey": "…"} 这个结构）
+   printf '{"apiKey": "sk_live_你复制的密钥"}' > ~/.onecall/creds.json
+   # 3. 收紧权限：仅本用户可读写（必须，权限不对技能会拒绝使用）
    chmod 600 ~/.onecall/creds.json
+   # 4. 告诉技能凭据文件在哪（这个变量存的是路径，不是密钥）
    export ONECALL_CREDENTIALS_FILE="$HOME/.onecall/creds.json"
    ```
 
-   要每次自动生效，把 `export` 那行加进 `~/.zshrc` / `~/.bashrc`；Windows 用 `setx ONECALL_API_KEY "sk_live_…"`。
+   **每次自动生效**：方式 A 把 `export ONECALL_API_KEY=…` 写进 `~/.zshrc` 或 `~/.bashrc`；方式 B 把 `export ONECALL_CREDENTIALS_FILE=…` 那一行写进去（注意写的是**路径**，密钥本身留在文件里，别把密钥写进 rc 文件）。
+
+   **Windows**：方式 A 用 `setx ONECALL_API_KEY "sk_live_…"`（写入用户环境变量，新开终端生效）；方式 B 在 PowerShell 里 `$env:ONECALL_CREDENTIALS_FILE="C:\Users\你\.onecall\creds.json"`，文件同样需要仅当前用户可读（icacls 设置），或直接用方式 A。
+
+   **以后换密钥**：网页吊销旧的 → 方式 A 重设一次变量；方式 B 只需替换 `creds.json` 里的密钥内容（权限保持 0600），其他都不用动。
 
 3. **验证**：对助手说 `看下配置状态`，显示密钥已配置即可（真正的权限校验由服务端在首次团队查询时完成）。
 
