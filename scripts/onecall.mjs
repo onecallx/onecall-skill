@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Portable OneCall Skill client. No dependencies, browser cookies or automatic writes. */
 import { createHash, randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
+import { constants, realpathSync } from 'node:fs';
 import { open, mkdir, lstat, readFile, rename } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 
 const CLI = fileURLToPath(import.meta.url);
 const VERSION = '0.1.0';
+const DEFAULT_BASE_URL = 'https://api.16x.tech';
+const DEFAULT_WEB_URL = 'https://app.16x.tech';
 const MAX_BYTES = 1024 * 1024;
 const TTL_MS = 15 * 60 * 1000;
 const result = (state, data = {}, next = { action: 'done' }) => ({ protocol: 1, version: VERSION, state, data, next });
@@ -96,7 +98,7 @@ function validatePayload(action, value) {
 function operationPath(action, target) {
   if (action === 'create') return '/v1/outbound/tasks';
   const id = safeId(target);
-  if (action === 'import') return `/v1/outbound/tasks/${id}/numbers`;
+  if (action === 'import') return `/v1/outbound/tasks/${id}/batches`;
   if (action === 'start' || action === 'resume') return `/v1/outbound/tasks/${id}/resume`;
   if (action === 'pause') return `/v1/outbound/tasks/${id}/pause`;
   invalid('未知操作。');
@@ -113,8 +115,8 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       options(flags, []);
       return result('done', { commands: ['status', 'auth setup', 'market list|show', 'agents list|create|edit|try', 'account open', 'calls list|show', 'tasks marketers|list|show|progress|numbers|create|import|start|pause|resume', 'operation show|confirm'], configuration: ['ONECALL_BASE_URL', 'ONECALL_WEB_URL', 'ONECALL_API_KEY or ONECALL_CREDENTIALS_FILE'] });
     }
-    const base = origin(env.ONECALL_BASE_URL, 'ONECALL_BASE_URL');
-    const web = origin(env.ONECALL_WEB_URL || base, 'ONECALL_WEB_URL');
+    const base = origin(env.ONECALL_BASE_URL || DEFAULT_BASE_URL, 'ONECALL_BASE_URL');
+    const web = origin(env.ONECALL_WEB_URL || (env.ONECALL_BASE_URL ? base : DEFAULT_WEB_URL), 'ONECALL_WEB_URL');
     const stateDir = resolve(env.ONECALL_STATE_DIR || join(homedir(), '.local', 'state', 'onecall-skill'));
     const key = async () => {
       if (apiKey) return apiKey;
@@ -169,12 +171,12 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       return result('done', { baseUrl: base, webUrl: web, apiKeyConfigured: Boolean(env.ONECALL_API_KEY || env.ONECALL_CREDENTIALS_FILE), authenticated: false, note: '仅检查配置；执行团队查询时由服务器验证权限。' });
     }
     if (group === 'auth' && command === 'setup' && !id) { options(flags, []); return handoff('/developer', '在开发者页面创建最小权限的团队 API Key，并在本机配置。无需将密钥发送到聊天。'); }
-    if (group === 'account' && command === 'open' && !id) { options(flags, []); return handoff('/market/employees', '请在网页中登录并展开“我的账户”，查看当前团队与余额。'); }
+    if (group === 'account' && command === 'open' && !id) { options(flags, []); return handoff('/account', '请在网页中登录账户页，查看当前团队与余额。'); }
     if (group === 'agents' && ['create', 'edit', 'try'].includes(command)) {
       options(flags, []);
-      if (command === 'create' && !id) return handoff('/market/build', '在对话构建页填写业务需求，核对摘要后创建员工。尚未创建任何员工。');
-      if (command === 'edit') return handoff(`/market/employees/${safeId(id)}`, '在团队员工页面选择音色或提交改进反馈。尚未更改配置或话术。');
-      if (command === 'try') return handoff(`/market/listing/${safeId(id)}`, '在员工详情选择体验，按网页要求登录、验证并确认。尚未发起通话。');
+      if (command === 'create' && !id) return handoff('/agents', '在 AI Agent 页选择「创建 Agent」，按网页引导填写业务需求并核对摘要。尚未创建任何员工。');
+      if (command === 'edit') return handoff(`/agents/${safeId(id)}`, '在 AI Agent 页面选择音色或提交改进反馈。尚未更改配置或话术。');
+      if (command === 'try') return handoff(`/market/${safeId(id)}`, '在员工详情选择体验，按网页要求登录、验证并确认。尚未发起通话。');
       invalid('创建员工不接受员工编号。');
     }
     if (group === 'market') {
@@ -189,8 +191,8 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
     if (group === 'tasks') {
       if (command === 'marketers' && !id) { options(flags, []); return result('done', await request('/v1/outbound/marketers')); }
       if (command === 'list' && !id) { options(flags, ['q', 'status', 'limit', 'offset']); return result('done', await request('/v1/outbound/tasks', { query: flags })); }
-      if (['show', 'progress', 'numbers'].includes(command)) {
-        options(flags, command === 'numbers' ? ['limit', 'cursor', 'offset'] : []);
+      if (['show', 'progress', 'numbers', 'batches'].includes(command)) {
+        options(flags, ['numbers', 'batches'].includes(command) ? ['limit', 'cursor', 'offset'] : []);
         return result('done', await request(`/v1/outbound/tasks/${safeId(id)}${command === 'show' ? '' : `/${command}`}`, { query: flags }));
       }
       if (['create', 'import', 'start', 'pause', 'resume'].includes(command)) {
@@ -224,6 +226,8 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       if (now() - record.createdAt > TTL_MS) throw new ClientError('CONFIRMATION_EXPIRED', '预览已过期且尚未提交，请重新核对任务并生成预览。');
       const pathName = operationPath(record.action, record.target);
       const body = validatePayload(record.action, record.body);
+      // 批次接口的服务端幂等键：同一操作重放不会重复导入号码。
+      if (record.action === 'import') body.idempotency_key = id;
       if (record.target && taskIdentity(await request(`/v1/outbound/tasks/${safeId(record.target)}`)) !== record.targetIdentity) throw new ClientError('TARGET_CHANGED', '任务状态或配置已改变，尚未提交。请重新核对并生成预览。');
       // A permanent exclusive claim survives timeouts/crashes. Never remove it to retry.
       try { await save(`${path}.claim`, { claimedAt: now() }, true); }
@@ -250,7 +254,10 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === CLI) {
+// 经符号链接安装技能目录时,argv[1] 是链接路径而 import.meta.url 是真实路径;
+// 两边都解析真实路径再比较,否则链接调用会静默零输出(违反协议承诺)。
+const realPath = value => { try { return realpathSync(value); } catch { return ''; } };
+if (process.argv[1] && realPath(process.argv[1]) === realPath(CLI)) {
   const output = await runCommand(process.argv.slice(2));
   process.stdout.write(`${JSON.stringify(output)}\n`);
   if (output.state === 'error' || output.state === 'unknown') process.exitCode = 1;

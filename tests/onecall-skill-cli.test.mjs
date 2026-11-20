@@ -2,8 +2,11 @@ import { test } from 'node:test';
 import { randomBytes } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, readFile, stat, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { symlinkSync, realpathSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { runCommand } from '../scripts/onecall.mjs';
 
 // Generated for the mock transport only; never a server-issued credential.
@@ -40,7 +43,7 @@ test('团队查询使用 API Key；无密钥在发请求前停止', async t => {
 
 test('创建、体验和账户只交接网页，不伪造业务结果', async t => {
   const f = await fixture(t);
-  for (const [args, path] of [[['agents', 'create'], '/market/build'], [['agents', 'try', 'education'], '/market/listing/education'], [['agents', 'edit', 'agt_1'], '/market/employees/agt_1'], [['account', 'open'], '/market/employees']]) {
+  for (const [args, path] of [[['agents', 'create'], '/agents'], [['agents', 'try', 'education'], '/market/education'], [['agents', 'edit', 'agt_1'], '/agents/agt_1'], [['account', 'open'], '/account']]) {
     const out = await f.run(...args);
     assert.equal(out.state, 'handoff');
     assert.equal(out.next.url, `http://localhost:5173${path}`);
@@ -92,7 +95,10 @@ test('上传只在确认后发送，预览不暴露客户原文', async t => {
   assert.equal((await f.run('operation', 'confirm', plan.data.operationId)).state, 'done');
   const writes = f.calls.filter(item => item.method === 'POST');
   assert.equal(writes.length, 1);
-  assert.equal(JSON.parse(writes[0].body).data[0].phone, '+8613800000000');
+  assert.equal(writes[0].url, 'http://localhost:3002/v1/outbound/tasks/task_1/batches');
+  const sentBody = JSON.parse(writes[0].body);
+  assert.equal(sentBody.data[0].phone, '+8613800000000');
+  assert.equal(sentBody.idempotency_key, plan.data.operationId);
 });
 
 test('启动和恢复仅使用服务端 preflight 入口', async t => {
@@ -165,4 +171,20 @@ test('服务端回显凭据不会进入错误输出', async t => {
   const failed = await f.run('operation', 'confirm', plan.data.operationId);
   assert.equal(failed.state, 'error');
   assert.equal(JSON.stringify(failed).includes(KEY), false);
+});
+
+test('经符号链接调用仍然输出协议 JSON（主模块判断需解析真实路径）', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'onecall-skill-link-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const script = realpathSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'onecall.mjs'));
+  const link = join(dir, 'onecall.mjs');
+  symlinkSync(script, link);
+  const r = spawnSync(process.execPath, [link, 'status'], {
+    encoding: 'utf8',
+    env: { ...process.env, ONECALL_BASE_URL: 'http://localhost:3002', ONECALL_API_KEY: '', ONECALL_CREDENTIALS_FILE: '', ONECALL_STATE_DIR: '' },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.protocol, 1);
+  assert.equal(out.state, 'done');
 });

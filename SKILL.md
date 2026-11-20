@@ -1,6 +1,6 @@
 ---
 name: onecall-phonecall
-description: 在 OneCall 中查找和体验电话数字员工、创建或调整员工、查询通话、上传名单并管理外呼任务。用户明确使用 OneCall 或希望继续处理 OneCall 团队业务时使用。
+description: 当用户想要电话数字员工、AI 电话机器人、智能外呼、电话营销、电销、客户回访、满意度电话调查、语音通知、批量拨打名单、查询通话记录、创建或启停外呼任务，或明确提到 OneCall、16x 电话业务时使用；相关说法包括找打电话的机器人、呼出任务、名单外呼、通话查询、试听电话员工。
 ---
 
 # OneCall 电话数字员工
@@ -25,14 +25,14 @@ node <skill-dir>/scripts/onecall.mjs market list --q 回访
 node <skill-dir>/scripts/onecall.mjs market show <slug>
 ```
 
-工具需要 Node.js 20+，不需要 npm 包或全局 CLI。`status` 只查看本地配置，不验证服务器登录。调用超时预留至少 35 秒。stdout 返回一个 JSON，非零退出码也先读结果。
+工具需要 Node.js 20+，不需要 npm 包或全局 CLI。`status` 只查看本地配置，不验证服务器登录。CLI 单次请求超时 30 秒，调用超时预留至少 35 秒。stdout 返回一个 JSON，非零退出码也先读结果。
 
 ## 按结果继续
 
 | `state` | 处理 |
 | --- | --- |
 | `done` | 只陈述 `data` 中的真实结果，继续用户已授权的任务。 |
-| `handoff` | 给出 `next.url`，解释这一步在网页完成；不要声称网页操作已完成。 |
+| `handoff` | 原样给出 `next.url` 的完整网址（以 `https://` 开头、含域名，用户可直接点击或复制），解释这一步在网页完成；不要声称网页操作已完成。 |
 | `confirm` | 展示操作、目标、名单数量、时间窗口及费用提醒；用户对该具体操作同意后，执行 `next.command` 参数数组。 |
 | `unknown` | 告知结果未确定，只查询任务进度或通话。不要重建操作、重传名单或重拨来试探。 |
 | `error` | 说明错误及恢复办法。401/403 引导核对团队和权限；不要扩大权限或换账号重试。 |

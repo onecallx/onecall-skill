@@ -8,8 +8,8 @@
 
 | 环境变量 | 含义 |
 | --- | --- |
-| `ONECALL_BASE_URL` | OneCall 服务的源地址，例如本地 `http://localhost:3002`；线上必须 HTTPS。不要附加 `/api` 或 `/v1`。 |
-| `ONECALL_WEB_URL` | 网页源地址；默认与服务地址相同。本地前端为 `http://localhost:5173`。 |
+| `ONECALL_BASE_URL` | OneCall 服务源地址。不配置时默认 `https://api.16x.tech`；自建部署才需要设置。线上必须 HTTPS，不要附加 `/api` 或 `/v1`。 |
+| `ONECALL_WEB_URL` | 网页源地址。不配置时默认 `https://app.16x.tech`；自建部署未单独设置时与服务地址相同。 |
 | `ONECALL_API_KEY` | 用户在 OneCall 开发者页创建的团队 API Key。公开市场不需要。 |
 | `ONECALL_CREDENTIALS_FILE` | 可替代密钥环境变量，指向用户自己准备的私密 JSON 文件，结构为 `{"apiKey":"…"}`。macOS/Linux 文件权限须为 0600。不要把文件内容回显到对话。 |
 | `ONECALL_STATE_DIR` | 可选，本地操作记录目录；默认 `~/.local/state/onecall-skill`。macOS/Linux 目录权限为 0700。不要共享给其他用户。 |
@@ -23,4 +23,4 @@
 
 `auth setup` 返回当前站点开发者页面的链接。Key 的权限和所属团队由服务器验证，Skill 不创建密钥、不修改用户权限、不选择其他团队。`status` 的 `apiKeyConfigured` 只表示本机有配置，不能当作登录成功。
 
-常见恢复：缺少地址则请用户指定自己的 OneCall 部署；401 核对密钥有效期，403 核对所需权限、团队可用状态；网络错误时只重试读请求。写请求未知时查看 `operation show <id>` 及实际业务状态，不能重新提交同一业务。
+常见恢复：连接失败时先核对默认站点或自建部署的 `ONECALL_BASE_URL` 源地址；401 核对密钥有效期，403 核对所需权限、团队可用状态；网络错误时只重试读请求。写请求未知时查看 `operation show <id>` 及实际业务状态，不能重新提交同一业务。`agents list` / `calls list` / `tasks marketers` 等返回 `HTTP_410`（`OPENAPI_ENDPOINT_RETIRED`）时，说明该站点已升级为任务模板版 OpenAPI，本版本技能依赖营销员外呼接口（`/v1/agents`、`/v1/calls`、`/v1/outbound/*`），暂不支持该类站点；请核对站点版本，不要换参数或换密钥重试。
