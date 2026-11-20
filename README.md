@@ -39,8 +39,6 @@ node ~/.codex/skills/onecall-phonecall/scripts/onecall.mjs status
 node ~/.codex/skills/onecall-phonecall/scripts/onecall.mjs market list --q 回访
 ```
 
-自建部署时，通过 `ONECALL_BASE_URL` 与 `ONECALL_WEB_URL` 指定自己的源地址；线上必须使用 HTTPS，不要附加 `/api` 或 `/v1`。
-
 公开查询无需密钥。团队操作需要在 OneCall 开发者页面创建 API Key，并在本机配置 `ONECALL_API_KEY`，或通过 `ONECALL_CREDENTIALS_FILE` 指向私密 JSON 文件。不要把密钥粘贴进对话或提交到仓库。`status` 只检查本地配置，不代表服务器授权成功。
 
 本 Skill 依赖服务端的营销员外呼 OpenAPI（`/v1/agents`、`/v1/calls`、`/v1/outbound/*`）。若这些命令返回 `HTTP_410`（`OPENAPI_ENDPOINT_RETIRED`），说明该 OneCall 站点已升级为任务模板版接口，本版本暂不兼容；请核对站点版本，详见[安装与配置](references/setup.md)。
