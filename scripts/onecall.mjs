@@ -20,7 +20,7 @@ class ClientError extends Error {
 const invalid = message => { throw new ClientError('INVALID_INPUT', message); };
 const digest = value => createHash('sha256').update(value).digest('hex');
 const isObject = value => value && typeof value === 'object' && !Array.isArray(value);
-const taskIdentity = task => digest(JSON.stringify(['id', 'public_id', 'name', 'status', 'agent_id', 'run_at', 'end_at', 'concurrency', 'window_start_hour', 'window_end_hour'].map(key => [key, task[key] ?? null])));
+const taskIdentity = task => digest(JSON.stringify(['id', 'name', 'status', 'state_version', 'error_code'].map(key => [key, task[key] ?? null])));
 const safeId = value => {
   if (typeof value !== 'string' || !/^[\p{L}\p{N}_-]{1,128}$/u.test(value)) invalid('请使用查询结果中的员工或任务编号。');
   return encodeURIComponent(value);
@@ -105,11 +105,10 @@ function validatePayload(action, value) {
   return {};
 }
 function operationPath(action, target) {
-  if (action === 'create') return '/v1/outbound/tasks';
-  const id = safeId(target);
-  if (action === 'import') return `/v1/outbound/tasks/${id}/numbers`;
-  if (action === 'start' || action === 'resume') return `/v1/outbound/tasks/${id}/resume`;
-  if (action === 'pause') return `/v1/outbound/tasks/${id}/pause`;
+  if (action === 'create') return { path: '/v1/outbound/tasks', method: 'POST' };
+  const task_id = safeId(target);
+  if (action === 'import') return { path: '/v1/outbound/tasks/numbers', method: 'POST', query: { task_id } };
+  if (action === 'start' || action === 'pause') return { path: '/v1/outbound/tasks/control', method: 'POST', query: { task_id } };
   invalid('未知操作。');
 }
 
@@ -197,11 +196,8 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       options(flags, ['limit', 'cursor']);
       return result('done', await request('/v1/outbound/task-templates', { query: flags }));
     }
-    if (group === 'agents' && command === 'list' && !id) { options(flags, ['type']); return result('done', await request('/v1/agents', { query: flags })); }
-    if (group === 'calls') {
-      if (command === 'list' && !id) { options(flags, ['limit', 'cursor', 'status']); return result('done', await request('/v1/calls', { query: flags })); }
-      if (command === 'show') { options(flags, []); return result('done', await request(`/v1/calls/${safeId(id)}`)); }
-    }
+    if (group === 'agents' && command === 'list' && !id) invalid('团队员工查询已随旧版接口退役；员工管理请在网页完成。');
+    if (group === 'calls') invalid('全局话单查询已随旧版接口退役；请使用 tasks calls <taskId> 按任务查询。');
     if (group === 'tasks') {
       if (command === 'list' && !id) {
         options(flags, ['q', 'status', 'limit', 'page', 'pageSize']);
@@ -213,15 +209,15 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
         const path = command === 'show' ? '/v1/outbound/tasks' : `/v1/outbound/tasks/${command}`;
         return result('done', await request(path, { query: { task_id: safeId(id), ...flags } }));
       }
-      if (['create', 'import', 'start', 'pause', 'resume'].includes(command)) {
+      if (['create', 'import', 'start', 'pause'].includes(command)) {
         options(flags, ['create', 'import'].includes(command) ? ['file'] : []);
         if (command === 'create' && id) invalid('创建任务不接受任务编号。');
         operationPath(command, id);
         const body = validatePayload(command, ['create', 'import'].includes(command) ? await inputJson(flags.file) : {});
         const scopeId = await scope();
-        const target = command === 'create' ? null : await request(`/v1/outbound/tasks/${safeId(id)}`);
+        const target = command === 'create' ? null : await request('/v1/outbound/tasks', { query: { task_id: safeId(id) } });
         const confirm = {
-          action: { create: '创建外呼任务', import: '追加联系人', start: '开始外呼', resume: '恢复外呼', pause: '暂停外呼' }[command],
+          action: { create: '创建外呼任务', import: '追加联系人', start: '开始外呼', pause: '暂停外呼' }[command],
           target: target ? { id, name: target.name, status: target.status } : { name: body.name, templateId: body.template_id, templateRevision: body.template_revision, contactsCount: body.contacts.length, autoStart: Boolean(body.auto_start) },
           ...(command === 'import' ? { count: body.contacts.length } : {}),
           consequence: command === 'create'
@@ -243,9 +239,11 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       if (record.state !== 'prepared') return result('unknown', { operationId: id }, { action: 'stop', say: '操作已提交或结果待核对，不会重复发送。请查询任务及进度。' });
       if (command === 'show') return result('done', { operationId: id, state: record.state, confirmation: record.confirm, expired: now() - record.createdAt > TTL_MS });
       if (now() - record.createdAt > TTL_MS) throw new ClientError('CONFIRMATION_EXPIRED', '预览已过期且尚未提交，请重新核对任务并生成预览。');
-      const pathName = operationPath(record.action, record.target);
-      const body = validatePayload(record.action, record.body);
-      if (record.target && taskIdentity(await request(`/v1/outbound/tasks/${safeId(record.target)}`)) !== record.targetIdentity) throw new ClientError('TARGET_CHANGED', '任务状态或配置已改变，尚未提交。请重新核对并生成预览。');
+      const spec = operationPath(record.action, record.target);
+      const body = record.action === 'start' || record.action === 'pause'
+        ? { action: record.action }
+        : validatePayload(record.action, record.body);
+      if (record.target && taskIdentity(await request('/v1/outbound/tasks', { query: { task_id: safeId(record.target) } })) !== record.targetIdentity) throw new ClientError('TARGET_CHANGED', '任务状态或配置已改变，尚未提交。请重新核对并生成预览。');
       // A permanent exclusive claim survives timeouts/crashes. Never remove it to retry.
       try { await save(`${path}.claim`, { claimedAt: now() }, true); }
       catch (error) { if (error.code === 'EEXIST') return result('unknown', { operationId: id }, { action: 'stop', say: '该操作已有提交记录，请查询结果，不要重复发送。' }); throw error; }
@@ -253,7 +251,7 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       record.state = 'submitting';
       await save(path, record);
       let outcome;
-      try { outcome = result('done', await request(pathName, { method: 'POST', body })); }
+      try { outcome = result('done', await request(spec.path, { method: 'POST', body, query: spec.query, idempotencyKey: id })); }
       catch (error) {
         outcome = result(error.uncertain ? 'unknown' : 'error', { operationId: id }, { action: 'stop', say: error.message });
         outcome.error = { code: error.code || 'REQUEST_FAILED', message: error.message };

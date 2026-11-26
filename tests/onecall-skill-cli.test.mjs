@@ -34,10 +34,10 @@ test('公开市场不发送密钥，编码查询且禁止跟随重定向', async
 
 test('团队查询使用 API Key；无密钥在发请求前停止', async t => {
   const f = await fixture(t);
-  assert.equal((await f.run('agents', 'list')).state, 'done');
+  assert.equal((await f.run('tasks', 'list')).state, 'done');
   assert.equal(f.calls[0].headers.Authorization, `Bearer ${KEY}`);
   delete f.env.ONECALL_API_KEY;
-  assert.equal((await f.run('calls', 'list')).error.code, 'AUTH_REQUIRED');
+  assert.equal((await f.run('tasks', 'list')).error.code, 'AUTH_REQUIRED');
   assert.equal(f.calls.length, 1);
 });
 
@@ -115,13 +115,51 @@ test('create 校验必填字段与联系人格式', async t => {
   assert.equal(f.calls.length, 0);
 });
 
-test('启动和恢复仅使用服务端 preflight 入口', async t => {
+test('启动和暂停走 control 端点并携带幂等键；resume 已移除', async t => {
   const f = await fixture(t);
-  for (const action of ['start', 'resume']) {
+  for (const action of ['start', 'pause']) {
     const plan = await f.run('tasks', action, 'task_1');
-    assert.equal((await f.run('operation', 'confirm', plan.data.operationId)).state, 'done');
+    const done = await f.run('operation', 'confirm', plan.data.operationId);
+    assert.equal(done.state, 'done');
+    const write = f.calls.find(item => item.method === 'POST' && item.headers['Idempotency-Key'] === plan.data.operationId);
+    assert.equal(write.url, `http://localhost:3002/v1/outbound/tasks/control?task_id=task_1`);
+    assert.deepEqual(JSON.parse(write.body), { action });
   }
-  assert.equal(f.calls.filter(item => item.method === 'POST').every(item => item.url.endsWith('/resume')), true);
+  assert.equal((await f.run('tasks', 'resume', 'task_1')).error.code, 'INVALID_INPUT');
+});
+
+test('追加联系人走 numbers 端点并携带幂等键', async t => {
+  const f = await fixture(t);
+  const file = await f.input('leads.json', { phones: ['+8613800000000'] });
+  const plan = await f.run('tasks', 'import', 'task_1', '--file', file);
+  await f.run('operation', 'confirm', plan.data.operationId);
+  const write = f.calls.find(item => item.method === 'POST');
+  assert.equal(write.url, 'http://localhost:3002/v1/outbound/tasks/numbers?task_id=task_1');
+  assert.equal(write.headers['Idempotency-Key'], plan.data.operationId);
+});
+
+test('任务预检使用查询参数式单查', async t => {
+  const f = await fixture(t);
+  await f.run('tasks', 'start', 'task_1');
+  assert.equal(f.calls[0].url, 'http://localhost:3002/v1/outbound/tasks?task_id=task_1');
+});
+
+test('legacy 任务预检 410 时在预览阶段如实报错，不生成操作也不落提交记录', async t => {
+  const f = await fixture(t, async () => new Response(JSON.stringify({ error: { code: 'OPENAPI_ENDPOINT_RETIRED' } }), { status: 410 }));
+  const plan = await f.run('tasks', 'start', 'oct_legacy');
+  assert.equal(plan.state, 'error');
+  assert.equal(plan.error.code, 'HTTP_410');
+  assert.equal(f.calls.filter(item => item.method === 'POST').length, 0);
+  const { readdir } = await import('node:fs/promises');
+  const files = await readdir(f.env.ONECALL_STATE_DIR).catch(() => []);
+  assert.equal(files.length, 0);
+});
+
+test('团队员工与全局话单命令已移除', async t => {
+  const f = await fixture(t);
+  assert.equal((await f.run('agents', 'list')).error.code, 'INVALID_INPUT');
+  assert.equal((await f.run('calls', 'list')).error.code, 'INVALID_INPUT');
+  assert.equal(f.calls.length, 0);
 });
 
 test('超时及服务端错误均保留未知结果，重复确认不会重发', async t => {
