@@ -101,7 +101,7 @@ test('上传只在确认后发送，预览不暴露客户原文', async t => {
   const writes = f.calls.filter(item => item.method === 'POST');
   assert.equal(writes.length, 1);
   const sentBody = JSON.parse(writes[0].body);
-  assert.equal(sentBody.contacts[0].phone, '+8613800000000');
+  assert.equal(sentBody.contacts[0].phone, '13800000000');
   assert.equal(sentBody.idempotency_key, undefined);
 });
 
@@ -145,15 +145,35 @@ test('任务预检使用查询参数式单查', async t => {
   assert.equal(f.calls[0].url, 'http://localhost:3002/v1/outbound/tasks?task_id=task_1');
 });
 
-test('legacy 任务预检 410 时在预览阶段如实报错，不生成操作也不落提交记录', async t => {
-  const f = await fixture(t, async () => new Response(JSON.stringify({ error: { code: 'OPENAPI_ENDPOINT_RETIRED' } }), { status: 410 }));
+test('legacy 任务单查 404 时在预览阶段如实报错，不生成操作也不落提交记录', async t => {
+  const f = await fixture(t, async () => new Response(JSON.stringify({ error: { code: 'TASK_NOT_FOUND' } }), { status: 404 }));
   const plan = await f.run('tasks', 'start', 'oct_legacy');
   assert.equal(plan.state, 'error');
-  assert.equal(plan.error.code, 'HTTP_410');
+  assert.equal(plan.error.code, 'HTTP_404');
   assert.equal(f.calls.filter(item => item.method === 'POST').length, 0);
   const { readdir } = await import('node:fs/promises');
   const files = await readdir(f.env.ONECALL_STATE_DIR).catch(() => []);
   assert.equal(files.length, 0);
+});
+
+test('联系人号码自动清理横线括号与前缀后提交', async t => {
+  const f = await fixture(t);
+  const file = await f.input('leads.json', { data: [{ phone: '138-0000-0001' }, { phone: '+8613800000002' }, { phone: '(0571) 8888 8888' }] });
+  const plan = await f.run('tasks', 'import', 'task_1', '--file', file);
+  assert.equal(plan.state, 'confirm');
+  assert.equal(plan.next.confirm.count, 3);
+  await f.run('operation', 'confirm', plan.data.operationId);
+  const sentBody = JSON.parse(f.calls.find(item => item.method === 'POST').body);
+  assert.deepEqual(sentBody.contacts.map(c => c.phone), ['13800000001', '13800000002', '057188888888']);
+});
+
+test('联系人 variables 界限对齐服务端：值 200 码点、最多 50 键', async t => {
+  const f = await fixture(t);
+  const longValue = { v: '字'.repeat(201) };
+  const manyKeys = { variables: Object.fromEntries(Array.from({ length: 51 }, (_, i) => [`k${i}`, 'v'])) };
+  assert.equal((await f.run('tasks', 'create', '--file', await f.input('a.json', { name: '回访', template_id: 'tpl_1', template_revision: 1, contacts: [{ phone: '13800000001', variables: longValue }] }))).error.code, 'INVALID_INPUT');
+  assert.equal((await f.run('tasks', 'import', 'task_1', '--file', await f.input('b.json', { contacts: [{ phone: '13800000002', ...manyKeys }] }))).error.code, 'INVALID_INPUT');
+  assert.equal(f.calls.length, 0);
 });
 
 test('团队员工与全局话单命令已移除', async t => {

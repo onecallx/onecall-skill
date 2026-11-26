@@ -68,11 +68,23 @@ async function inputJson(path) {
     return value;
   } finally { await handle.close(); }
 }
+// 与服务端 outbound-guard 同款号码归一：清空白/横线/括号、去前导 +/国家码/0 前缀（仅 11 位手机号场景）。
+const normalizePhone = raw => {
+  let s = String(raw).trim().replace(/[\s\-()（）]/g, '').replace(/^\+/, '');
+  if (/^0086\d{11}$/.test(s)) s = s.slice(4);
+  else if (/^86\d{11}$/.test(s)) s = s.slice(2);
+  if (/^0(1[3-9]\d{9})$/.test(s)) s = s.slice(1);
+  return s;
+};
 function validateContacts(list) {
   if (!Array.isArray(list) || list.length > 1000) invalid('每次最多 1000 个联系人。');
   for (const item of list) {
-    if (!isObject(item) || Object.keys(item).some(key => !['phone', 'name', 'variables', 'client_contact_id'].includes(key)) || typeof item.phone !== 'string' || !/^\+?\d{5,20}$/.test(item.phone) || item.name !== undefined && (typeof item.name !== 'string' || item.name.length > 120) || item.client_contact_id !== undefined && (typeof item.client_contact_id !== 'string' || item.client_contact_id.length > 128)) invalid('每个联系人须有有效 phone，且仅可附带不超过 120 字的 name、variables 或 client_contact_id。');
-    if (item.variables !== undefined && (!isObject(item.variables) || Object.entries(item.variables).some(([k, v]) => typeof k !== 'string' || k.length > 64 || typeof v !== 'string' || v.length > 500))) invalid('联系人 variables 须为键值均为字符串的对象（键 ≤64 字、值 ≤500 字）。');
+    if (!isObject(item) || Object.keys(item).some(key => !['phone', 'name', 'variables', 'client_contact_id'].includes(key)) || typeof item.phone !== 'string') invalid('每个联系人须有有效 phone，且仅可附带不超过 120 字的 name、variables 或 client_contact_id。');
+    item.phone = normalizePhone(item.phone);
+    if (!/^\d{5,20}$/.test(item.phone)) invalid('每个联系人须有有效 phone（自动清理空格、横线、括号与前导 +/国家码前缀后须为 5–20 位数字）。');
+    if (item.name !== undefined && (typeof item.name !== 'string' || item.name.length > 120)) invalid('每个联系人须有有效 phone，且仅可附带不超过 120 字的 name、variables 或 client_contact_id。');
+    if (item.client_contact_id !== undefined && (typeof item.client_contact_id !== 'string' || item.client_contact_id.length > 128)) invalid('每个联系人须有有效 phone，且仅可附带不超过 120 字的 name、variables 或 client_contact_id。');
+    if (item.variables !== undefined && (!isObject(item.variables) || Object.keys(item.variables).length > 50 || Object.entries(item.variables).some(([k, v]) => typeof k !== 'string' || k.length > 64 || typeof v !== 'string' || [...v].length > 200))) invalid('联系人 variables 须为键值均为字符串的对象（最多 50 键、键 ≤64 字、值 ≤200 字），与服务端行级校验一致。');
   }
   return list;
 }

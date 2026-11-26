@@ -41,7 +41,7 @@ node ~/.codex/skills/onecall-phonecall/scripts/onecall.mjs market list --q 回�
 
 公开查询无需密钥。团队操作需要在 OneCall 开发者页面创建 API Key，并在本机配置 `ONECALL_API_KEY`，或通过 `ONECALL_CREDENTIALS_FILE` 指向私密 JSON 文件。不要把密钥粘贴进对话或提交到仓库。`status` 只检查本地配置，不代表服务器授权成功。
 
-本 Skill 依赖服务端的任务模板 OpenAPI（`/v1/outbound/task-templates`、查询参数式 `/v1/outbound/tasks*`）。若站点对这些命令返回 `HTTP_410`（`OPENAPI_ENDPOINT_RETIRED`），说明该站点仍是旧版营销员接口，本版本已不再支持；请升级站点，详见[安装与配置](references/setup.md)。
+本 Skill 依赖服务端的任务模板 OpenAPI（`/v1/outbound/task-templates`、查询参数式 `/v1/outbound/tasks*`）。若 `templates list` 持续返回 404、且 `tasks list` 返回的条目不含模板字段（无 `state_version`），说明该站点可能仍是旧版营销员接口，本版本已不再支持——请升级站点，详见[安装与配置](references/setup.md)。
 
 最小权限：模板与任务查询 `outbound:read`；任务写入（创建、追加联系人、启停）还需 `outbound:write`。
 
@@ -185,7 +185,7 @@ node ~/.codex/skills/onecall-phonecall/scripts/onecall.mjs market list --q 回�
 2. 创建任务、导入名单、启停操作均先返回预览，确认后执行；同一确认编号重复提交不会重复发送请求。
 3. 助手不代替用户在网页完成登录、验证或付费；返回链接仅表示该步骤在网页进行。
 
-> 本流程已在真实 OneCall 服务（任务模板版）上完成端到端验证，详见[业务命令](references/workflows.md)。
+> 以上流程的任务链路（模板→创建→追加→启停→进度/号码/话单查询）已在真实 OneCall 服务（任务模板版）上完成端到端验证；号码级真实接通在同环境的服务端调度链路上尚未复现（详见[业务命令](references/workflows.md)）。
 
 ## 文档
 
