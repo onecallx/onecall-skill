@@ -183,6 +183,10 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       if (command === 'list' && !id) { options(flags, ['q', 'industry', 'scene', 'locale', 'region', 'limit', 'cursor']); return result('done', await request('/api/market/listings', { query: flags, publicAccess: true })); }
       if (command === 'show') { options(flags, []); return result('done', await request(`/api/market/listings/${safeId(id)}`, { publicAccess: true })); }
     }
+    if (group === 'templates' && command === 'list' && !id) {
+      options(flags, ['limit', 'cursor']);
+      return result('done', await request('/v1/outbound/task-templates', { query: flags }));
+    }
     if (group === 'agents' && command === 'list' && !id) { options(flags, ['type']); return result('done', await request('/v1/agents', { query: flags })); }
     if (group === 'calls') {
       if (command === 'list' && !id) { options(flags, ['limit', 'cursor', 'status']); return result('done', await request('/v1/calls', { query: flags })); }

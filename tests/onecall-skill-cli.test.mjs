@@ -173,6 +173,23 @@ test('服务端回显凭据不会进入错误输出', async t => {
   assert.equal(JSON.stringify(failed).includes(KEY), false);
 });
 
+test('templates list 调用任务模板列表端点并携带密钥', async t => {
+  const f = await fixture(t, async () => response({ items: [], has_more: false, next_cursor: null }));
+  const out = await f.run('templates', 'list');
+  assert.equal(out.state, 'done');
+  assert.equal(f.calls[0].url, 'http://localhost:3002/v1/outbound/task-templates');
+  assert.equal(f.calls[0].method, 'GET');
+  assert.equal(f.calls[0].headers.Authorization, `Bearer ${KEY}`);
+});
+
+test('templates list 仅接受 limit 与 cursor，拒绝关键词选项', async t => {
+  const f = await fixture(t);
+  assert.equal((await f.run('templates', 'list', '--q', '回访')).error.code, 'INVALID_INPUT');
+  assert.equal((await f.run('templates', 'list', '--limit', '20')).state, 'done');
+  assert.match(f.calls[0].url, /limit=20/);
+  assert.equal(f.calls.length, 1);
+});
+
 test('经符号链接调用仍然输出协议 JSON（主模块判断需解析真实路径）', async t => {
   const dir = await mkdtemp(join(tmpdir(), 'onecall-skill-link-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
