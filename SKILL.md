@@ -12,7 +12,7 @@ description: 当用户想要电话数字员工、AI 电话机器人、智能外�
 - 仅了解产品或费用：读 [产品与能力边界](references/product.md)，无需检查凭据。
 - 找员工、听示例：公开市场无需登录，使用 `market list` / `market show`。
 - 体验、创建、调优员工：使用 `agents try` / `agents create` / `agents edit` 获取 OneCall 网页入口，向用户提供链接，由现有网页完成登录、编辑、验证和确认。返回链接不代表已经创建、修改或拨打。
-- 查团队员工、通话、外呼任务，或导入名单和控制任务：读 [业务命令](references/workflows.md)，使用团队 API Key。
+- 查任务、话单、进度，或创建外呼任务：读 [业务命令](references/workflows.md)，使用团队 API Key；创建任务前必须先用 `templates list` 展示任务模板供用户选择。
 - 首次配置、安装后无法使用：读 [安装与配置](references/setup.md)。
 
 ## 使用工具
@@ -23,6 +23,7 @@ description: 当用户想要电话数字员工、AI 电话机器人、智能外�
 node <skill-dir>/scripts/onecall.mjs status
 node <skill-dir>/scripts/onecall.mjs market list --q 回访
 node <skill-dir>/scripts/onecall.mjs market show <slug>
+node <skill-dir>/scripts/onecall.mjs templates list
 ```
 
 工具需要 Node.js 20+，不需要 npm 包或全局 CLI。`status` 只查看本地配置，不验证服务器登录。CLI 单次请求超时 30 秒，调用超时预留至少 35 秒。stdout 返回一个 JSON，非零退出码也先读结果。
@@ -33,7 +34,7 @@ node <skill-dir>/scripts/onecall.mjs market show <slug>
 | --- | --- |
 | `done` | 只陈述 `data` 中的真实结果，继续用户已授权的任务。 |
 | `handoff` | 原样给出 `next.url` 的完整网址（以 `https://` 开头、含域名，用户可直接点击或复制），解释这一步在网页完成；不要声称网页操作已完成。 |
-| `confirm` | 展示操作、目标、名单数量、时间窗口及费用提醒；用户对该具体操作同意后，执行 `next.command` 参数数组。 |
+| `confirm` | 展示操作、目标、联系人数量、模板信息核对提示及费用提醒；用户对该具体操作同意后，执行 `next.command` 参数数组。 |
 | `unknown` | 告知结果未确定，只查询任务进度或通话。不要重建操作、重传名单或重拨来试探。 |
 | `error` | 说明错误及恢复办法。401/403 引导核对团队和权限；不要扩大权限或换账号重试。 |
 
@@ -42,8 +43,8 @@ node <skill-dir>/scripts/onecall.mjs market show <slug>
 ## 操作边界
 
 - 公开查询不要求凭据。密钥由用户在本地环境变量或私密文件中配置，不要求发到聊天里，不读取浏览器 cookie，不索取短信验证码。
-- 创建任务、上传名单、开始/恢复/暂停任务先生成本地操作预览。对同一目标、参数和费用已有明确授权时，不重复提问；否则在执行确认命令前确认。名单上传也可能向正在运行的任务立即推号，必须说明可能发起真实通话及计费。
-- 开始与恢复走服务端的启动前检查。创建任务不会自动上传名单或开工，不擅自扩大用户给定的联系人范围。
+- 创建任务、追加联系人、启停任务先生成本地操作预览。对同一目标、参数和费用已有明确授权时，不重复提问；否则在执行确认命令前确认。向运行中的任务追加联系人可能立即推号，必须说明可能发起真实通话及计费。
+- 模板（template_id 与 revision）只能来自 `templates list` 的真实返回，不猜测。确认创建前用列表结果向用户复述该模板的营销员、时间窗、并发，并核对联系人变量与模板要求。除非用户明确同意 auto_start，创建后不开始拨打；`start` 兼具启动与恢复语义。不擅自扩大用户给定的联系人范围。
 - 写请求不自动重试。CLI 的本地操作记录防止重复提交；未知结果只能查询。删除操作记录、换一个编号、修改参数都不是故障恢复办法。
 - 显示电话尾号即可；服务端公开体验号码可以完整展示。无依据时不编员工、在线状态、费用、余额或进度。
 - 只读取用户指定的名单/任务文件。操作记录含业务数据，位于 `ONECALL_STATE_DIR` 或用户本地状态目录，权限仅当前用户；任务结束后可由用户清理已核对的记录，不能清理未确定记录再重试。

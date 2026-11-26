@@ -16,11 +16,9 @@
 
 用户应在本地填写凭据，不向对话粘贴。需要的最小权限：
 
-- 查询团队员工：`assistant:read`。
-- 查询通话：`calls:read`。
-- 查询营销员、任务和进度：`outbound:read`。
-- 创建任务、上传名单、启停任务：`outbound:read` + `outbound:write`。
+- 查询模板、任务、进度、号码与话单：`outbound:read`。
+- 创建任务、追加联系人、启停任务：`outbound:read` + `outbound:write`。
 
 `auth setup` 返回当前站点开发者页面的链接。Key 的权限和所属团队由服务器验证，Skill 不创建密钥、不修改用户权限、不选择其他团队。`status` 的 `apiKeyConfigured` 只表示本机有配置，不能当作登录成功。
 
-常见恢复：连接失败时先核对默认站点或自建部署的 `ONECALL_BASE_URL` 源地址；401 核对密钥有效期，403 核对所需权限、团队可用状态；网络错误时只重试读请求。写请求未知时查看 `operation show <id>` 及实际业务状态，不能重新提交同一业务。`agents list` / `calls list` / `tasks marketers` 等返回 `HTTP_410`（`OPENAPI_ENDPOINT_RETIRED`）时，说明该站点已升级为任务模板版 OpenAPI，本版本技能依赖营销员外呼接口（`/v1/agents`、`/v1/calls`、`/v1/outbound/*`），暂不支持该类站点；请核对站点版本，不要换参数或换密钥重试。
+常见恢复：连接失败时先核对默认站点或自建部署的 `ONECALL_BASE_URL` 源地址；401 核对密钥有效期，403 核对所需权限、团队可用状态；网络错误时只重试读请求。写请求未知时查看 `operation show <id>` 及实际业务状态，不能重新提交同一业务。本版本（0.2.0）面向任务模板版 OpenAPI；若站点对 `templates list` / `tasks` 等返回 `HTTP_410`（`OPENAPI_ENDPOINT_RETIRED`），说明其为旧版营销员接口站点，已不再支持——请升级站点，不要换参数或换密钥重试。`tasks progress` 对列表中标记 `legacy_outbound` 的历史任务返回 404 属预期，话单与号码请用 `tasks calls` / `tasks numbers` 查询。
