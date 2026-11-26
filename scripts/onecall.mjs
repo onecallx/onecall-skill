@@ -133,13 +133,14 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       return apiKey;
     };
     const handoff = (path, say) => result('handoff', {}, { action: 'handoff', url: new URL(path, web).href, say });
-    const request = async (path, { method = 'GET', body, query = {}, publicAccess = false, idempotencyKey } = {}) => {
+    const request = async (path, { method = 'GET', body, query = {}, publicAccess = false, idempotencyKey, ifMatch } = {}) => {
       const url = new URL(path, base);
       for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
       const headers = { Accept: 'application/json' };
       if (!publicAccess) headers.Authorization = `Bearer ${await key()}`;
       if (body !== undefined) headers['Content-Type'] = 'application/json';
       if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+      if (ifMatch !== undefined) headers['If-Match'] = ifMatch;
       const write = method !== 'GET';
       let response, data;
       try {
@@ -226,7 +227,7 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
         };
         await secureDir();
         const operationId = randomUUID();
-        await save(join(stateDir, `${operationId}.json`), { id: operationId, scope: scopeId, action: command, target: id || null, targetIdentity: target ? taskIdentity(target) : null, body, confirm, state: 'prepared', createdAt: now() }, true);
+        await save(join(stateDir, `${operationId}.json`), { id: operationId, scope: scopeId, action: command, target: id || null, targetIdentity: target ? taskIdentity(target) : null, targetStateVersion: target?.state_version, body, confirm, state: 'prepared', createdAt: now() }, true);
         return result('confirm', { operationId, expiresAt: new Date(now() + TTL_MS).toISOString() }, { action: 'confirm', confirm, command: ['node', CLI, 'operation', 'confirm', operationId] });
       }
     }
@@ -251,7 +252,7 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       record.state = 'submitting';
       await save(path, record);
       let outcome;
-      try { outcome = result('done', await request(spec.path, { method: 'POST', body, query: spec.query, idempotencyKey: id })); }
+      try { outcome = result('done', await request(spec.path, { method: 'POST', body, query: spec.query, idempotencyKey: id, ...(record.action === 'start' || record.action === 'pause' ? { ifMatch: `"${record.targetStateVersion}"` } : {}) })); }
       catch (error) {
         outcome = result(error.uncertain ? 'unknown' : 'error', { operationId: id }, { action: 'stop', say: error.message });
         outcome.error = { code: error.code || 'REQUEST_FAILED', message: error.message };

@@ -115,8 +115,8 @@ test('create 校验必填字段与联系人格式', async t => {
   assert.equal(f.calls.length, 0);
 });
 
-test('启动和暂停走 control 端点并携带幂等键；resume 已移除', async t => {
-  const f = await fixture(t);
+test('启动和暂停走 control 端点并携带幂等键与 If-Match；resume 已移除', async t => {
+  const f = await fixture(t, async (_url, options) => response(options.method === 'GET' ? { id: 'task_1', name: '回访', status: 'paused', state_version: 7, error_code: null } : { id: 'task_1', status: 'running', state_version: 8 }));
   for (const action of ['start', 'pause']) {
     const plan = await f.run('tasks', action, 'task_1');
     const done = await f.run('operation', 'confirm', plan.data.operationId);
@@ -124,6 +124,7 @@ test('启动和暂停走 control 端点并携带幂等键；resume 已移除', a
     const write = f.calls.find(item => item.method === 'POST' && item.headers['Idempotency-Key'] === plan.data.operationId);
     assert.equal(write.url, `http://localhost:3002/v1/outbound/tasks/control?task_id=task_1`);
     assert.deepEqual(JSON.parse(write.body), { action });
+    assert.equal(write.headers['If-Match'], '"7"');
   }
   assert.equal((await f.run('tasks', 'resume', 'task_1')).error.code, 'INVALID_INPUT');
 });
