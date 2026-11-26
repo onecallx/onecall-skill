@@ -269,7 +269,7 @@ test('help 列出新命令面且不含已移除命令', async t => {
   const out = await f.run('help');
   const text = JSON.stringify(out.data.commands);
   assert.match(text, /templates list/);
-  assert.match(text, /tasks calls/);
+  assert.match(text, /numbers\|calls/);
   assert.doesNotMatch(text, /marketers|resume|calls list/);
 });
 
