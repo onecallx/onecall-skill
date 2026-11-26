@@ -345,3 +345,15 @@ test('服务端嵌套错误结构透出真实原因与 request_id', async t => {
   assert.match(out.error.message, /DUPLICATE_PHONE/);
   assert.match(out.error.message, /req_abc123def/);
 });
+
+test('同一请求内的重复号码原样透传，去重由服务端完成', async t => {
+  const f = await fixture(t);
+  const file = await f.input('dup.json', { phones: ['13800000002', '13800000002'] });
+  const plan = await f.run('tasks', 'import', 'task_1', '--file', file);
+  assert.equal(plan.state, 'confirm');
+  assert.equal(plan.next.confirm.count, 2);
+  const out = await f.run('operation', 'confirm', plan.data.operationId);
+  assert.equal(out.state, 'done');
+  const sent = JSON.parse(f.calls.filter(c => c.method === 'POST')[0].body);
+  assert.equal(sent.contacts.filter(c => c.phone === '13800000002').length, 2);
+});
