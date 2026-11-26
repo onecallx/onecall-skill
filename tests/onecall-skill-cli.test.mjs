@@ -328,3 +328,20 @@ test('经符号链接调用仍然输出协议 JSON（主模块判断需解析真
   assert.equal(out.protocol, 1);
   assert.equal(out.state, 'done');
 });
+
+test('服务端嵌套错误结构透出真实原因与 request_id', async t => {
+  const f = await fixture(t, async (url, options = {}) => {
+    if (options.method === 'POST') return new Response(JSON.stringify({
+      error: { code: 'NO_CALLABLE_CONTACTS', message: 'NO_CALLABLE_CONTACTS', details: [{ row_no: 1, reason_code: 'DUPLICATE_PHONE' }] },
+      request_id: 'req_abc123def',
+    }), { status: 422 });
+    return response({ id: 'task_1', name: '回访', status: 'paused' });
+  });
+  const plan = await f.run('tasks', 'import', 'task_1', '--file', await f.input('leads.json', { phones: ['13800000001'] }));
+  const out = await f.run('operation', 'confirm', plan.data.operationId);
+  assert.equal(out.state, 'error');
+  assert.equal(out.error.code, 'HTTP_422');
+  assert.match(out.error.message, /NO_CALLABLE_CONTACTS/);
+  assert.match(out.error.message, /DUPLICATE_PHONE/);
+  assert.match(out.error.message, /req_abc123def/);
+});

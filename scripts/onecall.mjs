@@ -124,6 +124,24 @@ function operationPath(action, target) {
   invalid('未知操作。');
 }
 
+// 新版服务端错误为嵌套对象 {error:{code,message,details},request_id}；旧版为字符串。
+// 两种都提取出人类可读原因，避免把真实错误吞成"请求未完成"。
+function serverErrorText(data) {
+  const err = data?.error;
+  if (typeof err === 'string') return err.slice(0, 500) || null;
+  if (!err || typeof err !== 'object' || Array.isArray(err)) return null;
+  const code = typeof err.code === 'string' ? err.code.slice(0, 80) : '';
+  const message = typeof err.message === 'string' ? err.message.slice(0, 400) : '';
+  const details = Array.isArray(err.details)
+    ? err.details.filter(d => d && typeof d === 'object' && d.reason_code != null).slice(0, 3)
+        .map(d => `${d.reason_code}${d.row_no != null ? `（行${d.row_no}）` : ''}`).join('、')
+    : '';
+  const text = [message && message !== code ? message : '', code, details].filter(Boolean).join('；').slice(0, 500);
+  if (!text) return null;
+  const requestId = typeof data?.request_id === 'string' ? data.request_id.slice(0, 36) : '';
+  return requestId ? `${text}（request_id: ${requestId}）` : text;
+}
+
 export async function runCommand(argv, { env = process.env, fetchImpl = fetch, now = () => Date.now() } = {}) {
   let apiKey = '';
   let submissionClaimed = false;
@@ -162,7 +180,7 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       } catch { throw new ClientError('NETWORK_UNAVAILABLE', write ? '提交结果未确定，请查询业务状态，不要重复提交。' : '服务暂不可达，请核对地址或稍后重试查询。', write); }
       if (!response.ok) {
         const code = response.status === 401 ? 'UNAUTHORIZED' : response.status === 403 ? 'FORBIDDEN' : `HTTP_${response.status}`;
-        const message = response.status === 401 ? '密钥无效或已过期，请在本地核对。' : response.status === 403 ? '当前团队或密钥权限不允许此操作。' : response.status === 404 ? '未找到该员工、任务或接口，请核对所选站点与编号。' : response.status >= 500 ? '服务暂不可用；写操作结果可能未确定，请先查询。' : typeof data?.error === 'string' ? data.error.slice(0, 500) : '请求未完成，请核对参数与当前业务状态。';
+        const message = response.status === 401 ? '密钥无效或已过期，请在本地核对。' : response.status === 403 ? '当前团队或密钥权限不允许此操作。' : response.status === 404 ? '未找到该员工、任务或接口，请核对所选站点与编号。' : response.status >= 500 ? '服务暂不可用；写操作结果可能未确定，请先查询。' : (serverErrorText(data) || '请求未完成，请核对参数与当前业务状态。');
         throw new ClientError(code, apiKey ? message.replaceAll(apiKey, '[redacted]') : message, write && response.status >= 500);
       }
       return data;
