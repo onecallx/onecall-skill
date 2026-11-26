@@ -190,6 +190,28 @@ test('templates list 仅接受 limit 与 cursor，拒绝关键词选项', async 
   assert.equal(f.calls.length, 1);
 });
 
+test('任务读命令使用查询参数式端点', async t => {
+  const f = await fixture(t, async () => response({ items: [] }));
+  await f.run('tasks', 'show', 'oct123');
+  await f.run('tasks', 'progress', 'oct123');
+  await f.run('tasks', 'numbers', 'oct123', '--limit', '20');
+  await f.run('tasks', 'calls', 'oct123');
+  assert.equal(f.calls[0].url, 'http://localhost:3002/v1/outbound/tasks?task_id=oct123');
+  assert.equal(f.calls[1].url, 'http://localhost:3002/v1/outbound/tasks/progress?task_id=oct123');
+  assert.equal(f.calls[2].url, 'http://localhost:3002/v1/outbound/tasks/numbers?task_id=oct123&limit=20');
+  assert.equal(f.calls[3].url, 'http://localhost:3002/v1/outbound/tasks/calls?task_id=oct123');
+});
+
+test('tasks list 映射 q 到 keyword 并支持状态过滤', async t => {
+  const f = await fixture(t, async () => response({ items: [], total: 0, page: 1, pageSize: 20 }));
+  await f.run('tasks', 'list', '--q', '回访', '--status', 'running');
+  const url = new URL(f.calls[0].url);
+  assert.equal(url.pathname, '/v1/outbound/tasks');
+  assert.equal(url.searchParams.get('keyword'), '回访');
+  assert.equal(url.searchParams.get('status'), 'running');
+  assert.equal(url.searchParams.has('q'), false);
+});
+
 test('经符号链接调用仍然输出协议 JSON（主模块判断需解析真实路径）', async t => {
   const dir = await mkdtemp(join(tmpdir(), 'onecall-skill-link-'));
   t.after(() => rm(dir, { recursive: true, force: true }));

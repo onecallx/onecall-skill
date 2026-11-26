@@ -193,11 +193,15 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       if (command === 'show') { options(flags, []); return result('done', await request(`/v1/calls/${safeId(id)}`)); }
     }
     if (group === 'tasks') {
-      if (command === 'marketers' && !id) { options(flags, []); return result('done', await request('/v1/outbound/marketers')); }
-      if (command === 'list' && !id) { options(flags, ['q', 'status', 'limit', 'offset']); return result('done', await request('/v1/outbound/tasks', { query: flags })); }
-      if (['show', 'progress', 'numbers', 'batches'].includes(command)) {
-        options(flags, ['numbers', 'batches'].includes(command) ? ['limit', 'cursor', 'offset'] : []);
-        return result('done', await request(`/v1/outbound/tasks/${safeId(id)}${command === 'show' ? '' : `/${command}`}`, { query: flags }));
+      if (command === 'list' && !id) {
+        options(flags, ['q', 'status', 'limit', 'page', 'pageSize']);
+        const { q, ...rest } = flags;
+        return result('done', await request('/v1/outbound/tasks', { query: { ...(q !== undefined ? { keyword: q } : {}), ...rest } }));
+      }
+      if (['show', 'progress', 'numbers', 'calls'].includes(command)) {
+        options(flags, ['numbers', 'calls'].includes(command) ? ['limit', 'cursor'] : []);
+        const path = command === 'show' ? '/v1/outbound/tasks' : `/v1/outbound/tasks/${command}`;
+        return result('done', await request(path, { query: { task_id: safeId(id), ...flags } }));
       }
       if (['create', 'import', 'start', 'pause', 'resume'].includes(command)) {
         options(flags, ['create', 'import'].includes(command) ? ['file'] : []);
