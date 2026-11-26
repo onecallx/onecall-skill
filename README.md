@@ -119,7 +119,14 @@ node ~/.codex/skills/onecall-phonecall/scripts/onecall.mjs market list --q 回�
    export ONECALL_CREDENTIALS_FILE="$HOME/.onecall/creds.json"
    ```
 
-   **方式 C · 把密钥发给助手，由助手代为配置**：直接把 `sk_live_…` 密钥发给 AI 助手，说 `这是我的 API Key，帮我配置好`。助手会把它写入本机私密文件（`~/.onecall/creds.json`，权限 0600），后续命令自动通过 `ONECALL_CREDENTIALS_FILE` 使用该文件；全程不在回复中回显密钥（仅显示尾 4 位供核对），不写入 shell 启动文件、不提交进任何仓库。配置后发送 `看下配置状态` 验证。注意：密钥会留在对话记录里，介意的话配置完成后到开发者页吊销重建，再更新 `creds.json` 里的密钥即可。
+   **方式 C · 把密钥发给助手，由助手代为配置**：把下面这段复制发给 AI 助手，替换其中的密钥占位符即可：
+
+   ```text
+   这是我的 OneCall API Key：sk_live_把这里替换成你的密钥
+   帮我配置好，配好了告诉我怎么验证。
+   ```
+
+   助手会把它写入本机私密文件（`~/.onecall/creds.json`，权限 0600），后续命令自动通过 `ONECALL_CREDENTIALS_FILE` 使用该文件；全程不在回复中回显密钥（仅显示尾 4 位供核对），不写入 shell 启动文件、不提交进任何仓库。配置后发送 `看下配置状态` 验证。注意：密钥会留在对话记录里，介意的话配置完成后到开发者页吊销重建，再更新 `creds.json` 里的密钥即可。
 
    **每次自动生效**：方式 A 把 `export ONECALL_API_KEY=…` 写进 `~/.zshrc` 或 `~/.bashrc`；方式 B 把 `export ONECALL_CREDENTIALS_FILE=…` 那一行写进去（注意写的是**路径**，密钥本身留在文件里，别把密钥写进 rc 文件）。
 
