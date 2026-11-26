@@ -264,6 +264,21 @@ test('tasks list 映射 q 到 keyword 并支持状态过滤', async t => {
   assert.equal(url.searchParams.has('q'), false);
 });
 
+test('help 列出新命令面且不含已移除命令', async t => {
+  const f = await fixture(t);
+  const out = await f.run('help');
+  const text = JSON.stringify(out.data.commands);
+  assert.match(text, /templates list/);
+  assert.match(text, /tasks calls/);
+  assert.doesNotMatch(text, /marketers|resume|calls list/);
+});
+
+test('输出协议版本号为 0.2.0', async t => {
+  const f = await fixture(t);
+  const out = await f.run('status');
+  assert.equal(out.version, '0.2.0');
+});
+
 test('经符号链接调用仍然输出协议 JSON（主模块判断需解析真实路径）', async t => {
   const dir = await mkdtemp(join(tmpdir(), 'onecall-skill-link-'));
   t.after(() => rm(dir, { recursive: true, force: true }));

@@ -8,7 +8,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const CLI = fileURLToPath(import.meta.url);
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 const DEFAULT_BASE_URL = 'https://api.16x.tech';
 const DEFAULT_WEB_URL = 'https://app.16x.tech';
 const MAX_BYTES = 1024 * 1024;
@@ -121,7 +121,7 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
     if (args.length > 3) invalid('命令参数过多。');
     if (!group || group === 'help') {
       options(flags, []);
-      return result('done', { commands: ['status', 'auth setup', 'market list|show', 'agents list|create|edit|try', 'account open', 'calls list|show', 'tasks marketers|list|show|progress|numbers|create|import|start|pause|resume', 'operation show|confirm'], configuration: ['ONECALL_BASE_URL', 'ONECALL_WEB_URL', 'ONECALL_API_KEY or ONECALL_CREDENTIALS_FILE'] });
+      return result('done', { commands: ['status', 'auth setup', 'market list|show', 'templates list', 'agents create|edit|try', 'account open', 'tasks list|show|progress|numbers|calls|create|import|start|pause', 'operation show|confirm'], configuration: ['ONECALL_BASE_URL', 'ONECALL_WEB_URL', 'ONECALL_API_KEY or ONECALL_CREDENTIALS_FILE'] });
     }
     const base = origin(env.ONECALL_BASE_URL || DEFAULT_BASE_URL, 'ONECALL_BASE_URL');
     const web = origin(env.ONECALL_WEB_URL || (env.ONECALL_BASE_URL ? base : DEFAULT_WEB_URL), 'ONECALL_WEB_URL');
