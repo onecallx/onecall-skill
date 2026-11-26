@@ -68,37 +68,46 @@ async function inputJson(path) {
     return value;
   } finally { await handle.close(); }
 }
+function validateContacts(list) {
+  if (!Array.isArray(list) || list.length > 1000) invalid('每次最多 1000 个联系人。');
+  for (const item of list) {
+    if (!isObject(item) || Object.keys(item).some(key => !['phone', 'name', 'variables', 'client_contact_id'].includes(key)) || typeof item.phone !== 'string' || !/^\+?\d{5,20}$/.test(item.phone) || item.name !== undefined && (typeof item.name !== 'string' || item.name.length > 120) || item.client_contact_id !== undefined && (typeof item.client_contact_id !== 'string' || item.client_contact_id.length > 128)) invalid('每个联系人须有有效 phone，且仅可附带不超过 120 字的 name、variables 或 client_contact_id。');
+    if (item.variables !== undefined && (!isObject(item.variables) || Object.entries(item.variables).some(([k, v]) => typeof k !== 'string' || k.length > 64 || typeof v !== 'string' || v.length > 500))) invalid('联系人 variables 须为键值均为字符串的对象（键 ≤64 字、值 ≤500 字）。');
+  }
+  return list;
+}
+function normalizeContacts(value) {
+  if (Object.keys(value).some(key => !['phones', 'data', 'contacts'].includes(key))) invalid('名单仅接受 contacts、phones 或 data 中的一种。');
+  const count = ['phones', 'data', 'contacts'].filter(key => value[key] !== undefined).length;
+  if (count !== 1) invalid('名单仅接受 contacts、phones 或 data 中的一种。');
+  if (value.contacts) return validateContacts(value.contacts);
+  const data = value.data || (Array.isArray(value.phones) ? value.phones.map(phone => ({ phone })) : null);
+  if (!Array.isArray(data) || !data.length) invalid('名单至少包含 1 个联系人。');
+  return validateContacts(data.map(item => isObject(item) && item.variables ? { phone: item.phone, name: item.name, variables: item.variables, client_contact_id: item.client_contact_id } : { phone: item?.phone, name: item?.name }));
+}
 function validatePayload(action, value) {
   if (!isObject(value)) invalid('操作内容无效。');
   if (action === 'create') {
-    const keys = ['name', 'agent_id', 'run_at', 'end_at', 'concurrency', 'window_start_hour', 'window_end_hour'];
+    const keys = ['name', 'template_id', 'template_revision', 'contacts', 'auto_start', 'client_task_id'];
     if (Object.keys(value).some(key => !keys.includes(key))) invalid('任务包含不支持的字段。');
-    if (typeof value.name !== 'string' || !value.name.trim() || value.name.length > 120) invalid('任务名称不能为空，最多 120 字。');
-    safeId(value.agent_id);
-    for (const key of ['run_at', 'end_at']) if (value[key] != null && (typeof value[key] !== 'string' || !/(Z|[+-]\d{2}:\d{2})$/.test(value[key]) || !Number.isFinite(Date.parse(value[key])))) invalid('任务时间须为包含时区的 ISO 日期时间。');
-    if (value.run_at && value.end_at && Date.parse(value.end_at) <= Date.parse(value.run_at)) invalid('结束时间必须晚于开始时间。');
-    if (value.concurrency !== undefined && (!Number.isInteger(value.concurrency) || value.concurrency < 1 || value.concurrency > 100)) invalid('并发数须为 1 至 100 的整数。');
-    const hour = v => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 23 ? v * 60 : typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? Number(v.slice(0, 2)) * 60 + Number(v.slice(3)) : NaN;
-    const start = hour(value.window_start_hour ?? 9), end = hour(value.window_end_hour ?? 20);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) invalid('请提供有效的当日呼叫时间窗口，结束时间须晚于开始时间。');
-    return { ...value, concurrency: value.concurrency ?? 1, window_start_hour: value.window_start_hour ?? 9, window_end_hour: value.window_end_hour ?? 20 };
+    if (typeof value.name !== 'string' || !value.name.trim() || value.name.length > 200) invalid('任务名称不能为空，最多 200 字。');
+    if (typeof value.template_id !== 'string' || !value.template_id.trim()) invalid('template_id 必填，请从 templates list 结果中选择。');
+    if (!Number.isInteger(value.template_revision) || value.template_revision < 1) invalid('template_revision 必填且为正整数，请从 templates list 结果中取当前值。');
+    if (value.contacts === undefined) invalid('contacts 必填；暂无名单可用空数组，创建后通过 tasks import 追加。');
+    if (value.auto_start !== undefined && typeof value.auto_start !== 'boolean') invalid('auto_start 须为布尔值。');
+    if (value.client_task_id !== undefined && (typeof value.client_task_id !== 'string' || value.client_task_id.length > 128)) invalid('client_task_id 须为不超过 128 字的字符串。');
+    const contacts = validateContacts(value.contacts);
+    if (value.auto_start && !contacts.length) invalid('空名单任务不能自动开始，须在追加名单后手动启动。');
+    return { name: value.name, template_id: value.template_id, template_revision: value.template_revision, contacts, ...(value.auto_start !== undefined ? { auto_start: value.auto_start } : {}), ...(value.client_task_id !== undefined ? { client_task_id: value.client_task_id } : {}) };
   }
-  if (action === 'import') {
-    if (Object.keys(value).some(key => !['phones', 'data'].includes(key)) || Boolean(value.phones) === Boolean(value.data)) invalid('名单仅接受 phones 或 data 中的一种。');
-    const data = value.data || (Array.isArray(value.phones) ? value.phones.map(phone => ({ phone })) : null);
-    if (!Array.isArray(data) || !data.length || data.length > 100) invalid('每次上传 1 至 100 个号码。');
-    for (const item of data) {
-      if (!isObject(item) || Object.keys(item).some(key => !['phone', 'name'].includes(key)) || typeof item.phone !== 'string' || !/^\+?\d{5,20}$/.test(item.phone) || item.name !== undefined && (typeof item.name !== 'string' || item.name.length > 120)) invalid('每个联系人须有有效 phone，且仅可附带不超过 120 字的 name。');
-    }
-    return { data };
-  }
+  if (action === 'import') return { contacts: normalizeContacts(value) };
   if (Object.keys(value).length) invalid('启停任务不接受额外请求内容。');
   return {};
 }
 function operationPath(action, target) {
   if (action === 'create') return '/v1/outbound/tasks';
   const id = safeId(target);
-  if (action === 'import') return `/v1/outbound/tasks/${id}/batches`;
+  if (action === 'import') return `/v1/outbound/tasks/${id}/numbers`;
   if (action === 'start' || action === 'resume') return `/v1/outbound/tasks/${id}/resume`;
   if (action === 'pause') return `/v1/outbound/tasks/${id}/pause`;
   invalid('未知操作。');
@@ -125,12 +134,13 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       return apiKey;
     };
     const handoff = (path, say) => result('handoff', {}, { action: 'handoff', url: new URL(path, web).href, say });
-    const request = async (path, { method = 'GET', body, query = {}, publicAccess = false } = {}) => {
+    const request = async (path, { method = 'GET', body, query = {}, publicAccess = false, idempotencyKey } = {}) => {
       const url = new URL(path, base);
       for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
       const headers = { Accept: 'application/json' };
       if (!publicAccess) headers.Authorization = `Bearer ${await key()}`;
       if (body !== undefined) headers['Content-Type'] = 'application/json';
+      if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
       const write = method !== 'GET';
       let response, data;
       try {
@@ -211,11 +221,12 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
         const scopeId = await scope();
         const target = command === 'create' ? null : await request(`/v1/outbound/tasks/${safeId(id)}`);
         const confirm = {
-          action: { create: '创建外呼任务', import: '上传名单', start: '开始外呼', resume: '恢复外呼', pause: '暂停外呼' }[command],
-          target: target ? { id, name: target.name, status: target.status } : { name: body.name, agentId: body.agent_id },
-          ...(command === 'create' ? { schedule: { runAt: body.run_at ?? null, endAt: body.end_at ?? null, windowStart: body.window_start_hour, windowEnd: body.window_end_hour, timezone: 'Asia/Shanghai', concurrency: body.concurrency } } : {}),
-          ...(command === 'import' ? { count: body.data.length } : {}),
-          consequence: command === 'create' ? '仅创建任务，不上传名单或自动开工。' : command === 'pause' ? '停止后续拨打；已在进行的通话可能继续。' : '可能发起真实电话并计费；费用以当前团队费率为准。上传到运行中的任务可能立即拨号。',
+          action: { create: '创建外呼任务', import: '追加联系人', start: '开始外呼', resume: '恢复外呼', pause: '暂停外呼' }[command],
+          target: target ? { id, name: target.name, status: target.status } : { name: body.name, templateId: body.template_id, templateRevision: body.template_revision, contactsCount: body.contacts.length, autoStart: Boolean(body.auto_start) },
+          ...(command === 'import' ? { count: body.contacts.length } : {}),
+          consequence: command === 'create'
+            ? (body.auto_start ? '创建后立即开始拨打并计费；费用以当前团队费率为准。请先核对 templates list 中该模板与 revision 的营销员、时间窗与并发。' : '仅创建任务，不开始拨打。请先核对 templates list 中该模板与 revision 的营销员、时间窗、并发及联系人 variables 要求。')
+            : command === 'pause' ? '停止后续拨打；已在进行的通话可能继续。' : '可能发起真实电话并计费；费用以当前团队费率为准。向运行中的任务追加联系人可能立即拨号。',
         };
         await secureDir();
         const operationId = randomUUID();
@@ -234,8 +245,6 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       if (now() - record.createdAt > TTL_MS) throw new ClientError('CONFIRMATION_EXPIRED', '预览已过期且尚未提交，请重新核对任务并生成预览。');
       const pathName = operationPath(record.action, record.target);
       const body = validatePayload(record.action, record.body);
-      // 批次接口的服务端幂等键：同一操作重放不会重复导入号码。
-      if (record.action === 'import') body.idempotency_key = id;
       if (record.target && taskIdentity(await request(`/v1/outbound/tasks/${safeId(record.target)}`)) !== record.targetIdentity) throw new ClientError('TARGET_CHANGED', '任务状态或配置已改变，尚未提交。请重新核对并生成预览。');
       // A permanent exclusive claim survives timeouts/crashes. Never remove it to retry.
       try { await save(`${path}.claim`, { claimedAt: now() }, true); }

@@ -65,18 +65,23 @@ test('非 HTTPS 外部服务、路径逃逸、未知参数均在请求前拒绝'
 
 test('创建先出完整预览，确认一次提交，再次确认只返回已保存结果', async t => {
   const f = await fixture(t);
-  const file = await f.input('task.json', { name: '客户回访', agent_id: 'agt_1', run_at: '2026-12-01T09:00:00+08:00' });
+  const file = await f.input('task.json', { name: '客户回访', template_id: 'tpl_1', template_revision: 3, contacts: [{ phone: '+8613800000000' }] });
   const plan = await f.run('tasks', 'create', '--file', file);
   assert.equal(plan.state, 'confirm');
-  assert.equal(plan.next.confirm.schedule.concurrency, 1);
-  assert.equal(plan.next.confirm.schedule.timezone, 'Asia/Shanghai');
+  assert.equal(plan.next.confirm.target.templateId, 'tpl_1');
+  assert.equal(plan.next.confirm.target.templateRevision, 3);
+  assert.equal(plan.next.confirm.target.contactsCount, 1);
+  assert.equal(plan.next.confirm.target.autoStart, false);
   assert.equal(f.calls.length, 0);
   const [one, two] = [await f.run('operation', 'confirm', plan.data.operationId), await f.run('operation', 'confirm', plan.data.operationId)];
   assert.deepEqual(two, one);
   assert.equal(one.state, 'done');
   assert.equal(f.calls.length, 1);
   assert.equal(f.calls[0].method, 'POST');
-  assert.equal(f.calls[0].url, 'http://localhost:3002/v1/outbound/tasks');
+  const sentBody = JSON.parse(f.calls[0].body);
+  assert.equal(sentBody.name, '客户回访');
+  assert.equal(sentBody.template_id, 'tpl_1');
+  assert.equal(sentBody.template_revision, 3);
   const log = await readFile(join(f.env.ONECALL_STATE_DIR, `${plan.data.operationId}.json`), 'utf8');
   assert.equal(log.includes(KEY), false);
   if (process.platform !== 'win32') {
@@ -95,10 +100,19 @@ test('上传只在确认后发送，预览不暴露客户原文', async t => {
   assert.equal((await f.run('operation', 'confirm', plan.data.operationId)).state, 'done');
   const writes = f.calls.filter(item => item.method === 'POST');
   assert.equal(writes.length, 1);
-  assert.equal(writes[0].url, 'http://localhost:3002/v1/outbound/tasks/task_1/batches');
   const sentBody = JSON.parse(writes[0].body);
-  assert.equal(sentBody.data[0].phone, '+8613800000000');
-  assert.equal(sentBody.idempotency_key, plan.data.operationId);
+  assert.equal(sentBody.contacts[0].phone, '+8613800000000');
+  assert.equal(sentBody.idempotency_key, undefined);
+});
+
+test('create 校验必填字段与联系人格式', async t => {
+  const f = await fixture(t);
+  assert.equal((await f.run('tasks', 'create', '--file', await f.input('a.json', { name: '回访', template_id: 'tpl_1', contacts: [{ phone: 'abc' }] }))).error.code, 'INVALID_INPUT');
+  assert.equal((await f.run('tasks', 'create', '--file', await f.input('b.json', { name: '回访', template_id: 'tpl_1', template_revision: 3, contacts: [], auto_start: true }))).error.code, 'INVALID_INPUT');
+  assert.equal((await f.run('tasks', 'create', '--file', await f.input('c.json', { template_id: 'tpl_1', template_revision: 3, contacts: [] }))).error.code, 'INVALID_INPUT');
+  assert.equal((await f.run('tasks', 'create', '--file', await f.input('d.json', { name: '回访', template_revision: 3, contacts: [] }))).error.code, 'INVALID_INPUT');
+  assert.equal((await f.run('tasks', 'create', '--file', await f.input('e.json', { name: '回访', template_id: 'tpl_1', template_revision: 0, contacts: [] }))).error.code, 'INVALID_INPUT');
+  assert.equal(f.calls.length, 0);
 });
 
 test('启动和恢复仅使用服务端 preflight 入口', async t => {
@@ -156,11 +170,11 @@ test('进程中断遗留提交 claim 时不把操作显示为尚未提交', asyn
   assert.equal(f.calls.filter(item => item.method === 'POST').length, 0);
 });
 
-test('超过名单上限、非 JSON、没有时区的任务时间均不提交', async t => {
+test('超过名单上限、不支持的字段均不提交', async t => {
   const f = await fixture(t);
-  const leads = await f.input('leads.json', { phones: Array(101).fill('+8613800000000') });
+  const leads = await f.input('leads.json', { phones: Array(1001).fill('+8613800000000') });
   assert.equal((await f.run('tasks', 'import', 'task_1', '--file', leads)).state, 'error');
-  const taskFile = await f.input('task.json', { name: '回访', agent_id: 'agt_1', run_at: '2026-12-01 09:00' });
+  const taskFile = await f.input('task.json', { name: '回访', template_id: 'tpl_1', template_revision: 3, contacts: [], window_start_hour: '09:00' });
   assert.equal((await f.run('tasks', 'create', '--file', taskFile)).state, 'error');
   assert.equal(f.calls.length, 0);
 });
