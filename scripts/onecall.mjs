@@ -215,7 +215,14 @@ export async function runCommand(argv, { env = process.env, fetchImpl = fetch, n
       if (command === 'list' && !id) {
         options(flags, ['q', 'status', 'limit', 'page', 'pageSize']);
         const { q, ...rest } = flags;
-        return result('done', await request('/v1/outbound/tasks', { query: { ...(q !== undefined ? { keyword: q } : {}), ...rest } }));
+        const data = await request('/v1/outbound/tasks', { query: { ...(q !== undefined ? { keyword: q } : {}), ...rest } });
+        // 只呈现任务模板版任务：历史（legacy_outbound）条目整个隐藏，号码/话单一律走新链路。
+        if (Array.isArray(data?.items)) {
+          const visible = data.items.filter(item => item.kind !== 'legacy_outbound');
+          const removed = data.items.length - visible.length;
+          return result('done', { ...data, items: visible, ...(Number.isInteger(data.total) && removed ? { total: Math.max(0, data.total - removed) } : {}) });
+        }
+        return result('done', data);
       }
       if (['show', 'progress', 'numbers', 'calls'].includes(command)) {
         options(flags, ['numbers', 'calls'].includes(command) ? ['limit', 'cursor'] : []);

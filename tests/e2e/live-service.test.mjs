@@ -14,28 +14,16 @@ const opts = { skip: !E2E_ENABLED && '设 ONECALL_E2E=1 且本地 develop 服务
 const run = (...args) => runCommand(args, deps);
 const taskId = value => value.data?.id;
 
-test('E2E 只读旅程：status → 市场与模板可见 → 任务列表含 legacy 标记', opts, async () => {
+test('E2E 只读旅程：status → 市场与模板可见 → 任务列表仅呈现任务模板版（历史任务隐藏）', opts, async () => {
   assert.equal((await run('status')).state, 'done');
   const market = await run('market', 'list');
   assert.equal(market.state, 'done');
   const templates = await run('templates', 'list');
   assert.equal(templates.state, 'done');
   assert.ok(templates.data.items.length >= 1, '预置模板应可见');
-  const tasks = await run('tasks', 'list', '--limit', '5');
-  assert.equal(tasks.state, 'done');
-  assert.ok(tasks.data.items.some(t => t.kind === 'legacy_outbound'), '历史任务应带 legacy 标记');
-});
-
-test('E2E legacy 任务：show/progress 404 如实透出，numbers/calls 走历史路径', opts, async () => {
   const tasks = await run('tasks', 'list', '--limit', '20');
-  const legacy = tasks.data.items.find(t => t.kind === 'legacy_outbound');
-  const show = await run('tasks', 'show', legacy.id);
-  assert.equal(show.state, 'error');
-  assert.equal(show.error.code, 'HTTP_404');
-  const progress = await run('tasks', 'progress', legacy.id);
-  assert.equal(progress.error.code, 'HTTP_404');
-  assert.equal((await run('tasks', 'numbers', legacy.id, '--limit', '5')).state, 'done');
-  assert.equal((await run('tasks', 'calls', legacy.id, '--limit', '5')).state, 'done');
+  assert.equal(tasks.state, 'done');
+  assert.equal(tasks.data.items.some(t => t.kind === 'legacy_outbound'), false, '历史任务不应出现在列表');
 });
 
 test('E2E 写旅程：模板创建（auto_start=false）→ 幂等确认 → 断言非运行 → 控制受理 → 查询回读', opts, async t => {

@@ -28,7 +28,7 @@ CLI tasks numbers <taskId> --limit 20
 CLI tasks calls <taskId> --limit 20
 ```
 
-`templates list` 返回任务模板（名称、营销员、时间窗、并发、revision 与联系人变量 schema），是创建任务的唯一入口。`tasks list` 支持关键词（`--q`）、状态与分页过滤。历史任务在列表中标记 `kind:"legacy_outbound"`：其话单与号码仍可通过 `tasks calls` / `tasks numbers` 查询（服务端走历史路径），但 `tasks progress` 对其返回 404，属预期行为。以返回的 `next_cursor` / `has_more` 继续分页，不自动读取全部客户资料。
+`templates list` 返回任务模板（名称、营销员、时间窗、并发、revision 与联系人变量 schema），是创建任务的唯一入口。`tasks list` 支持关键词（`--q`）、状态与分页过滤，仅呈现任务模板版任务——升级前的历史任务整体隐藏，其号码与话单不再提供查询，需要旧数据请在 OneCall 网页或服务端后台处理。以返回的 `next_cursor` / `has_more` 继续分页，不自动读取全部客户资料。
 
 ## 创建和外呼
 

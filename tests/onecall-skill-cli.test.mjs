@@ -145,7 +145,20 @@ test('任务预检使用查询参数式单查', async t => {
   assert.equal(f.calls[0].url, 'http://localhost:3002/v1/outbound/tasks?task_id=task_1');
 });
 
-test('legacy 任务单查 404 时在预览阶段如实报错，不生成操作也不落提交记录', async t => {
+test('tasks list 过滤历史任务并校正 total，只呈现任务模板版条目', async t => {
+  const f = await fixture(t, async () => response({ items: [
+    { id: 'oct_new1', name: '新任务', status: 'running', state_version: 2, client_task_id: null, accepted_numbers: 1, filtered_rows: 0, created_at: '2026-11-26 10:00:00', error_code: null },
+    { id: 'oct_old1', name: '旧任务', kind: 'legacy_outbound', status: 'completed', created_at: '2026-11-20 10:00:00' },
+    { id: 'oct_new2', name: '新任务2', status: 'paused', state_version: 1, client_task_id: null, accepted_numbers: 0, filtered_rows: 0, created_at: '2026-11-26 11:00:00', error_code: null },
+  ], total: 5, page: 1, pageSize: 20 }));
+  const out = await f.run('tasks', 'list');
+  assert.equal(out.state, 'done');
+  assert.deepEqual(out.data.items.map(i => i.id), ['oct_new1', 'oct_new2']);
+  assert.equal(out.data.items.every(i => i.kind === undefined), true);
+  assert.equal(out.data.total, 4);
+});
+
+test('对不存在或历史编号单查 404 时在预览阶段如实报错，不生成操作也不落提交记录', async t => {
   const f = await fixture(t, async () => new Response(JSON.stringify({ error: { code: 'TASK_NOT_FOUND' } }), { status: 404 }));
   const plan = await f.run('tasks', 'start', 'oct_legacy');
   assert.equal(plan.state, 'error');
